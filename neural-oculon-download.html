@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html{color-scheme:dark}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Neural Oculon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the eye owns the screen; a side drawer on the left holds past conversations; the command bar docks at the bottom. */
+:root{
+  --void:#000;
+  --violet:#7b4dff;
+  --accent:#3fa4ff;
+  --sapphire:#2f7bff;
+  --user:#9fd0ff;
+  --ink:#e9e4ff;
+  --dim:#8f87ad;
+  --edge:rgba(140,110,255,.38);
+  --panel:rgba(3,2,8,.95);
+  --beat:0;
+  --f-ui:"Chakra Petch",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--void);color:var(--ink);font-family:var(--f-mono);overflow:hidden}
+button{font:inherit;color:inherit}
+#eye{position:fixed;inset:0;width:100%;height:100%;display:block}
+.app{position:fixed;inset:0;display:grid;grid-template-rows:minmax(0,1fr) auto;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+.stage{position:relative;min-height:0}
+
+.say{
+  position:absolute;left:50%;bottom:.75rem;transform:translateX(-50%);width:min(36rem,calc(100% - 2rem));
+  text-align:center;font:400 14px/1.6 var(--f-mono);color:var(--ink);min-height:1.6em;
+  text-shadow:0 0 14px rgba(4,3,10,.95),0 0 4px rgba(4,3,10,.9);transition:opacity .9s;pointer-events:none;overflow-wrap:anywhere;white-space:pre-wrap;
+}
+.say.fade{opacity:0}
+.say.dim{color:var(--dim)}
+.say.long{
+  box-sizing:border-box;width:min(46rem,calc(100% - 2rem));max-height:46%;overflow-y:auto;pointer-events:auto;text-align:left;padding:.8rem 1rem;
+  background:rgba(0,0,0,.62);border:1px solid var(--edge);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  scrollbar-width:thin;scrollbar-color:var(--edge) transparent;
+}
+.say.long:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.say.typing::after{content:"\258D";margin-left:1px;animation:caret 1s steps(1) infinite}
+@keyframes caret{50%{opacity:0}}
+
+.status{position:absolute;top:1rem;right:1rem;display:flex;align-items:center;gap:.6rem;font:500 11px/1 var(--f-ui);letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+.status i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 calc(4px + 10px*var(--beat)) var(--accent);opacity:calc(.55 + .45*var(--beat))}
+
+/* menu button */
+.menu-btn{
+  position:fixed;z-index:6;top:calc(env(safe-area-inset-top,0px) + .9rem);left:1rem;width:2.75rem;height:2.75rem;
+  display:grid;place-content:center;gap:5px;cursor:pointer;border:1px solid var(--edge);border-radius:2px;
+  background:rgba(6,4,16,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:border-color .2s;
+}
+.menu-btn span{display:block;width:18px;height:2px;background:var(--accent);box-shadow:0 0 6px rgba(63,164,255,.6)}
+.menu-btn span:nth-child(2){width:12px}
+.menu-btn:hover{border-color:var(--accent)}
+.menu-btn:focus-visible,.d-btn:focus-visible,.d-item:focus-visible,.d-x:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* drawer */
+.scrim{position:fixed;inset:0;z-index:7;background:rgba(2,1,8,.5)}
+.drawer{
+  position:fixed;z-index:8;top:0;left:0;bottom:0;width:min(21rem,88vw);box-sizing:border-box;display:flex;flex-direction:column;gap:.9rem;
+  padding:calc(env(safe-area-inset-top,0px) + 1rem) 1rem calc(env(safe-area-inset-bottom,0px) + 1rem);
+  background:var(--panel);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-right:1px solid var(--edge);
+  box-shadow:12px 0 40px rgba(60,20,160,.08);
+  transform:translateX(-102%);visibility:hidden;transition:transform .35s cubic-bezier(.2,.8,.2,1),visibility 0s .35s;
+}
+.drawer.open{transform:none;visibility:visible;transition:transform .35s cubic-bezier(.2,.8,.2,1),visibility 0s}
+.d-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.d-title{font:600 13px/1 var(--f-ui);letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+.d-x{width:2.2rem;height:2.2rem;display:grid;place-items:center;background:none;border:1px solid var(--edge);border-radius:2px;cursor:pointer;font-size:1.2rem;line-height:1}
+.d-x:hover{border-color:var(--accent)}
+.d-view{display:flex;flex-direction:column;gap:.8rem;min-height:0;flex:1}
+.d-btn{
+  background:rgba(123,77,255,.1);border:1px solid var(--edge);border-radius:2px;padding:.55rem .8rem;cursor:pointer;
+  font:600 11px/1.2 var(--f-ui);letter-spacing:.14em;text-transform:uppercase;transition:border-color .2s,opacity .2s;
+}
+.d-btn:hover{border-color:var(--accent)}
+.d-btn:disabled{opacity:.4;cursor:default}
+.d-btn.warn{border-color:#ff6b7a;color:#ffb3bb}
+.d-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem;overflow-y:auto;min-height:0;scrollbar-width:thin;scrollbar-color:var(--edge) transparent}
+.d-item{
+  display:grid;gap:.3rem;width:100%;box-sizing:border-box;text-align:left;cursor:pointer;
+  background:rgba(123,77,255,.06);border:1px solid rgba(140,110,255,.2);border-radius:2px;padding:.7rem .8rem;transition:border-color .2s,background .2s;
+}
+.d-item:hover{border-color:var(--accent);background:rgba(63,164,255,.06)}
+.d-item .ti{font:500 13px/1.4 var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d-item .me{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font:500 10.5px/1.2 var(--f-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.chip{padding:.15rem .4rem;border:1px solid var(--edge);border-radius:2px;color:var(--accent)}
+.d-empty{margin:0;font-size:13px;line-height:1.6;color:var(--dim)}
+.t-bar{display:flex;flex-wrap:wrap;gap:.5rem}
+.t-title{margin:0;font:500 14px/1.4 var(--f-mono);overflow-wrap:anywhere}
+.thread{display:flex;flex-direction:column;gap:.8rem;overflow-y:auto;min-height:0;flex:1;padding-right:.25rem;scrollbar-width:thin;scrollbar-color:var(--edge) transparent}
+.msg{margin:0;font-size:13px;line-height:1.6;overflow-wrap:anywhere;white-space:pre-wrap}
+.msg b{font:600 10.5px/1 var(--f-ui);letter-spacing:.14em;margin-right:.45em}
+.msg.user{color:var(--user)}
+.msg.ai{color:var(--ink)}
+.msg.ai b{color:var(--accent)}
+
+/* command bar */
+.bar{
+  --cut:14px;justify-self:center;box-sizing:border-box;width:calc(100% - 2rem);max-width:52rem;margin:.5rem 0 1rem;padding:1px;
+  background:linear-gradient(90deg,var(--accent),var(--violet) 45%,var(--sapphire));
+  clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut));
+}
+.bar-in{
+  display:flex;align-items:center;gap:.5rem;padding:.4rem .4rem .4rem 1.2rem;background:rgba(6,4,16,.88);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut));
+}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#cmd{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--user);caret-color:var(--user);font:500 16px/1.2 var(--f-mono);letter-spacing:.02em;padding:.7rem 0}
+#cmd::placeholder{color:rgba(233,228,255,.42);font:500 13px/1.2 var(--f-ui);letter-spacing:.22em}
+.send{
+  flex:none;width:2.9rem;height:2.9rem;display:grid;place-items:center;cursor:pointer;
+  border:1px solid var(--edge);background:rgba(63,164,255,calc(.05 + .14*var(--beat)));color:var(--accent);
+  font:600 1.5rem/1 var(--f-ui);text-shadow:0 0 calc(4px + 14px*var(--beat)) var(--accent);
+  transform:scale(calc(1 + .1*var(--beat)));transition:border-color .2s,opacity .2s;
+}
+.send:hover{border-color:var(--accent)}
+.send:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.send.stop{color:#ff9aa6;border-color:rgba(255,120,140,.6);text-shadow:none;font-size:1.1rem}
+
+@media (prefers-reduced-motion:reduce){.say.typing::after{animation:none}.drawer{transition:none}}
+</style>
+
+<canvas id="eye" aria-hidden="true"></canvas>
+
+<button class="menu-btn" id="menuBtn" type="button" aria-label="Abrir conversas" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button>
+<div class="scrim" id="scrim" hidden></div>
+
+<aside class="drawer" id="drawer" aria-label="Conversas anteriores" inert>
+  <div class="d-head">
+    <span class="d-title">Conversas</span>
+    <button class="d-x" id="closeBtn" type="button" aria-label="Fechar menu">&times;</button>
+  </div>
+  <div class="d-view" id="listView">
+    <button class="d-btn" id="newBtn" type="button">+ Nova conversa</button>
+    <ul class="d-list" id="list"></ul>
+  </div>
+  <div class="d-view" id="threadView" hidden>
+    <div class="t-bar">
+      <button class="d-btn" id="backBtn" type="button">&lsaquo; Voltar</button>
+      <button class="d-btn" id="contBtn" type="button">Continuar</button>
+      <button class="d-btn" id="delBtn" type="button">Apagar</button>
+    </div>
+    <h2 class="t-title" id="tTitle"></h2>
+    <div class="thread" id="thread"></div>
+  </div>
+</aside>
+
+<div class="app">
+  <main class="stage" id="stage">
+    <div class="status" aria-hidden="true"><i></i><span id="state">Oculon · Ocioso</span></div>
+    <p class="say" id="say">Oculon online. Pergunte sobre qualquer assunto: geografia, matemática, probabilidade, estatística ou conversa livre. Comece com PESQUISE para uma resposta mais profunda. Respondo com o que sei, sem acesso à internet em tempo real.</p>
+  </main>
+  <form class="bar" id="form" autocomplete="off">
+    <div class="bar-in">
+      <label class="sr" for="cmd">Comando para o Oculon</label>
+      <input id="cmd" type="text" placeholder="ORQUESTRE SUA VONTADE..." maxlength="280" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send">
+      <button class="send" id="send" type="submit" aria-label="Enviar comando">&gt;</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const canvas = $('eye'), ctx = canvas.getContext('2d');
+  const stage = $('stage'), say = $('say'), cmd = $('cmd'), form = $('form'), send = $('send'), stateEl = $('state');
+  const drawer = $('drawer'), scrim = $('scrim'), menuBtn = $('menuBtn'), closeBtn = $('closeBtn');
+  const listView = $('listView'), threadView = $('threadView'), listEl = $('list'), threadEl = $('thread');
+  const newBtn = $('newBtn'), backBtn = $('backBtn'), contBtn = $('contBtn'), delBtn = $('delBtn'), tTitle = $('tTitle');
+  const root = document.documentElement;
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.35 : 1;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function seeded(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const rand = seeded(11);
+  const rr = (a, b) => a + Math.random() * (b - a);
+
+  /* ---------- scene data ---------- */
+  const fil = Array.from({length: 200}, () => ({
+    a0: rand() * TAU, r0: .35 + rand() * 1.6, len: .5 + rand() * 1.5, dir: rand() < .5 ? -1 : 1,
+    w: (rand() - .5) * .35, ph: rand() * TAU, gold: rand() < .4, wid: .6 + rand() * 1.5, al: .12 + rand() * .26
+  }));
+  const blobs = Array.from({length: 8}, (_, i) => ({a: i * TAU / 8 + rand(), r: .3 + rand() * .9, ph: rand() * TAU, sz: .5 + rand() * .6, gold: i % 3 === 0, w: (rand() - .5) * .18}));
+  const dust = Array.from({length: 90}, () => ({a: rand() * TAU, r: rand() * 1.7, ph: rand() * TAU, s: .6 + rand() * 1.3}));
+  const STAR_TINTS = ['255,255,255', '200,215,255', '170,205,255', '215,190,255'];
+  const stars = Array.from({length: 420}, () => {
+    const z = .3 + rand() * 1.3, big = rand() < .03;
+    return {
+      x: rand(), y: rand(), z, ph: rand() * TAU, sp: .5 + rand() * 1.8, b: .2 + rand() * .55, big,
+      s: big ? 1.8 + rand() * .8 : .5 + z * .5 * rand() + .3, c: STAR_TINTS[Math.floor(rand() * STAR_TINTS.length)]
+    };
+  });
+  const parts = Array.from({length: 120}, () => ({off: rand(), sp: .05 + rand() * .09, a0: rand() * TAU, sz: .7 + rand() * 1.5, gold: rand() < .45, spin: (rand() < .5 ? -1 : 1) * (.4 + rand() * .8)}));
+  const bolts = Array.from({length: 9}, (_, i) => ({a: i * TAU / 9 + rand() * .4, ph: rand() * TAU, len: 1.1 + rand()}));
+
+  const S = {
+    t: 0, last: 0, gx: 0, gy: 0, tx: 0, ty: 0, jx: 0, jy: 0, jt: 0, dwell: .6, q: [],
+    blink: 0, blinkT: -1, nextBlink: 2.2, dbl: false,
+    research: 0, rTarget: 0, think: 0, thTarget: 0, speak: 0, spTarget: 0,
+    sa: 0, sb: 0, ps: 0, tk: 0, hp: 0, px: 0, py: 0, pt: -99, cxs: 0, sh: null, nsh: 4, dock: 0, dockT: 0
+  };
+
+  let W = 0, H = 0, dpr = 1, cx0 = 0, cx = 0, cy = 0, R = 100, RB = 100, cy0 = 0, cyDock = 0, narrow = false, drawerOpen = false;
+  function layout() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    const m = stage.getBoundingClientRect();
+    narrow = W < 760;
+    const availH = Math.max(120, m.bottom - m.top);
+    let r = Math.min(availH * .34, (W - 24) / 3.3);
+    if (!narrow) r = Math.min(r, W * .22);
+    RB = Math.max(40, r);
+    R = RB;
+    cx0 = W / 2;
+    if (!S.cxs) S.cxs = cx0;
+    cy0 = m.top + availH * .46;
+    cyDock = m.top + availH * .28;
+    cy = cy0;
+  }
+
+  /* ---------- geometry helpers ---------- */
+  function lens(a, ht, hb) {
+    const ct = ht / .75, cb = hb / .75;
+    ctx.moveTo(-a, 0);
+    ctx.bezierCurveTo(-.55 * a, -ct, .55 * a, -ct, a, 0);
+    ctx.bezierCurveTo(.55 * a, cb, -.55 * a, cb, -a, 0);
+    ctx.closePath();
+  }
+  function bez(a, c, u, s) {
+    const m = 1 - u;
+    return [m*m*m*(-a) + 3*m*m*u*(-.55*a) + 3*m*u*u*(.55*a) + u*u*u*a, s * 3 * m * u * c];
+  }
+  function bezPt(p0, p1, p2, p3, u) {
+    const m = 1 - u;
+    return m*m*m*p0 + 3*m*m*u*p1 + 3*m*u*u*p2 + u*u*u*p3;
+  }
+  function tri(r1, a1, r2, a2, r3, a3) {
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a1) * r1, Math.sin(a1) * r1);
+    ctx.lineTo(Math.cos(a2) * r2, Math.sin(a2) * r2);
+    ctx.lineTo(Math.cos(a3) * r3, Math.sin(a3) * r3);
+    ctx.closePath();
+  }
+  function plateRing(n, rIn, rOut, rot, cA, cB, stroke, t) {
+    const step = TAU / n;
+    ctx.strokeStyle = stroke;
+    for (let i = 0; i < n; i++) {
+      const a = rot + i * step, sh = .5 + .5 * Math.sin(a * 3 - t * 2);
+      tri(rOut, a - step / 2, rOut, a + step / 2, rIn, a);
+      ctx.fillStyle = cA(sh); ctx.fill(); ctx.stroke();
+      tri(rIn, a, rIn, a + step, rOut, a + step / 2);
+      ctx.fillStyle = cB(1 - sh); ctx.fill(); ctx.stroke();
+    }
+  }
+  const beatAt = p => Math.min(1, Math.exp(-Math.pow((p - .07) / .045, 2)) + .55 * Math.exp(-Math.pow((p - .27) / .06, 2)));
+  const glowDisc = (x, y, r, rgb, a) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${rgb},${a.toFixed(3)})`); g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  };
+
+  /* ---------- behaviours ---------- */
+  const PATTERNS = [
+    [[-1, .05], [1, -.05], [0, 0]],
+    [[-.9, -.3], [-.9, .35], [.9, .1], [0, 0]],
+    [[1, .2], [-1, -.1], [.3, -.4], [0, 0]]
+  ];
+  function nextTarget() {
+    if (!S.q.length) {
+      S.q = S.speak > .5 ? [[0, .45], [-.3, .5], [.3, .4]] : PATTERNS[Math.floor(Math.random() * PATTERNS.length)].slice();
+    }
+    const p = S.q.shift();
+    S.tx = p[0]; S.ty = p[1];
+    S.dwell = S.research > .5 ? rr(.18, .45) : rr(.6, 1.5);
+  }
+  function updateBlink(dt) {
+    if (S.blinkT < 0) {
+      S.nextBlink -= dt;
+      if (S.nextBlink <= 0) { S.blinkT = 0; S.dbl = Math.random() < .22; }
+      return;
+    }
+    S.blinkT += dt;
+    const bt = S.blinkT, cl = .07, hold = .05, op = .3;
+    if (bt < cl) S.blink = bt / cl;
+    else if (bt < cl + hold) S.blink = 1;
+    else if (bt < cl + hold + op) { const x = (bt - cl - hold) / op; S.blink = Math.pow(1 - x, 3); }
+    else {
+      S.blink = 0; S.blinkT = -1;
+      if (S.dbl) { S.dbl = false; S.nextBlink = .1; } else S.nextBlink = rr(2.4, 6);
+    }
+  }
+
+  /* ---------- drawing: surroundings ---------- */
+  function hud(t, beat) {
+    const sc = Math.min(1, (W / 2 - 8) / (2.1 * R));
+    ctx.save();
+    ctx.scale(sc, sc * (.55 + .07 * Math.sin(t * .2 * calm)));
+    ctx.globalCompositeOperation = 'lighter';
+    const rings = [[1.7, 8, .55, '63,164,255', 1], [1.92, 14, .35, '110,85,200', -1], [2.06, 3, .8, '90,205,255', 1]];
+    const speed = 1 + S.research * 3;
+    const lw = Math.max(1.6, R / 85);
+    rings.forEach(([rm, n, fill, col, dir], k) => {
+      const r = R * rm, rot = t * .12 * dir * calm * speed;
+      ctx.lineWidth = 1; ctx.strokeStyle = `rgba(${col},.1)`;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+      ctx.lineWidth = lw; ctx.strokeStyle = `rgba(${col},${(.28 + .22 * beat + .15 * S.speak).toFixed(3)})`;
+      for (let i = 0; i < n; i++) {
+        const a0 = rot + i * TAU / n;
+        ctx.beginPath(); ctx.arc(0, 0, r, a0, a0 + TAU / n * fill); ctx.stroke();
+      }
+      if (k) {
+        const na = rot * 2.4 + k * 2;
+        for (let s = 0; s < 12; s++) {
+          const a = na - s * .05 * dir;
+          ctx.fillStyle = `rgba(${col},${((1 - s / 12) * .9).toFixed(3)})`;
+          ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, Math.max(1.6, R / 70) * (1 - s / 16), 0, TAU); ctx.fill();
+        }
+      }
+    });
+    ctx.strokeStyle = 'rgba(233,228,255,.2)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    const tr = R * 1.82, tk = t * .05 * calm;
+    for (let i = 0; i < 120; i++) {
+      const a = tk + i * TAU / 120, l = i % 5 ? .02 : .05;
+      ctx.moveTo(Math.cos(a) * tr, Math.sin(a) * tr); ctx.lineTo(Math.cos(a) * tr * (1 + l), Math.sin(a) * tr * (1 + l));
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function stream(t) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const base = Math.max(1, R / 220), sp = (1 + S.research * 3) * calm;
+    for (const p of parts) {
+      const ph = (t * p.sp * sp + p.off) % 1;
+      const e = Math.pow(ph, 1.4);
+      const rad = R * (2.5 * (1 - e) + .5 * e);
+      const ang = p.a0 + p.spin * e * 3 + t * .1 * calm;
+      const al = Math.sin(ph * Math.PI) * .9;
+      ctx.fillStyle = p.gold ? `rgba(110,190,255,${al.toFixed(3)})` : `rgba(150,135,210,${al.toFixed(3)})`;
+      const s = p.sz * base * (1.3 - ph * .5);
+      ctx.fillRect(Math.cos(ang) * rad * 1.25 - s / 2, Math.sin(ang) * rad * .85 - s / 2, s, s);
+    }
+    ctx.restore();
+  }
+
+  /* ---------- drawing: the eye ---------- */
+  function drawEye(t, g) {
+    const {A, A2, H2, ht, hb, ix, iy, Ri, Rp, contract, beat} = g;
+
+    ctx.save();
+    ctx.beginPath(); lens(A, ht, hb); ctx.clip();
+
+    const bg = ctx.createRadialGradient(ix * .3, iy * .3, R * .1, 0, 0, A * 1.05);
+    bg.addColorStop(0, '#150a38'); bg.addColorStop(.55, '#09051a'); bg.addColorStop(1, '#030208');
+    ctx.fillStyle = bg; ctx.fillRect(-A * 1.1, -R * 1.3, A * 2.2, R * 2.6);
+
+    const nx = ix * .35, ny = iy * .35;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const b of blobs) {
+      const a = b.a + t * b.w * calm;
+      glowDisc(nx + Math.cos(a) * R * b.r * 1.25, ny + Math.sin(a) * R * b.r * .7, R * b.sz, b.gold ? '50,130,255' : '140,80,255', .1 + .05 * Math.sin(t * .6 + b.ph));
+    }
+    ctx.lineCap = 'round';
+    for (const f of fil) {
+      ctx.beginPath();
+      for (let k = 0; k <= 14; k++) {
+        const u = k / 14;
+        const ang = f.a0 + f.dir * f.len * u + t * f.w * calm;
+        const rad = R * (f.r0 + .05 * Math.sin(u * 5 + f.ph + t * .6 * calm) + .1 * u * f.dir);
+        const x = nx + Math.cos(ang) * rad * 1.25, y = ny + Math.sin(ang) * rad * .9;
+        if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      const al = f.al * .8 * (.85 + .3 * Math.sin(t * .9 * calm + f.ph)) * (1 + .5 * S.speak);
+      const lw = f.wid * Math.max(.6, R / 240);
+      const col = f.gold ? '70,160,255' : '160,110,255';
+      ctx.strokeStyle = `rgba(${col},${(al * .3).toFixed(3)})`; ctx.lineWidth = lw * 4.5; ctx.stroke();
+      ctx.strokeStyle = `rgba(${col},${al.toFixed(3)})`; ctx.lineWidth = lw; ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const d of dust) {
+      const a = d.a + t * .03 * calm, tw = .3 + .7 * (.5 + .5 * Math.sin(t * 1.4 + d.ph));
+      ctx.fillStyle = `rgba(160,210,255,${(.55 * tw).toFixed(3)})`;
+      const sz = d.s * Math.max(1, R / 200);
+      ctx.fillRect(nx + Math.cos(a) * d.r * R * 1.25, ny + Math.sin(a) * d.r * R * .9, sz, sz);
+    }
+
+    ctx.save();
+    ctx.translate(ix, iy);
+
+    // neural bolts leaving the iris
+    ctx.globalCompositeOperation = 'lighter';
+    for (const b of bolts) {
+      const al = Math.pow(Math.max(0, Math.sin(t * 1.7 + b.ph * 3)), 10) * .85;
+      if (al < .03) continue;
+      ctx.beginPath();
+      for (let k = 0; k <= 10; k++) {
+        const u = k / 10, r = Ri * (1.02 + b.len * .9 * u);
+        const off = Math.sin(u * 11 + b.ph + t * 4) * R * .05 * u;
+        const x = Math.cos(b.a) * r - Math.sin(b.a) * off, y = Math.sin(b.a) * r + Math.cos(b.a) * off;
+        if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(150,110,255,${(al * .4).toFixed(3)})`; ctx.lineWidth = Math.max(3, R / 55); ctx.stroke();
+      ctx.strokeStyle = `rgba(210,235,255,${al.toFixed(3)})`; ctx.lineWidth = Math.max(1, R / 200); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // iris body
+    ctx.lineWidth = Math.max(.6, R / 300);
+    const ib = ctx.createRadialGradient(0, 0, Rp, 0, 0, Ri);
+    ib.addColorStop(0, '#0b1240'); ib.addColorStop(.7, '#1a1258'); ib.addColorStop(1, '#3a2290');
+    ctx.fillStyle = ib; ctx.beginPath(); ctx.arc(0, 0, Ri, 0, TAU); ctx.fill();
+
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(0, 0, Ri, '50,130,255', .18 + .1 * beat);
+    ctx.lineWidth = Math.max(.6, R / 380);
+    for (let i = 0; i < 96; i++) {
+      const a = i * TAU / 96 + S.sa * .3, r1 = Rp * 1.3, r2 = Ri * (.78 + .2 * (i % 3) / 2);
+      ctx.strokeStyle = i % 2 ? 'rgba(110,185,255,.3)' : 'rgba(170,130,255,.28)';
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    ctx.lineWidth = Math.max(.6, R / 300);
+    const rMid = Ri * .62;
+    plateRing(24, rMid, Ri, S.sa, s => `rgba(120,160,255,${(.16 + .3 * s).toFixed(3)})`, s => `rgba(200,150,255,${(.14 + .26 * s).toFixed(3)})`, 'rgba(215,230,255,.6)', t);
+    plateRing(14, Rp * 1.18 + contract * Ri * .05, rMid + Ri * .02, S.sb, s => `rgba(90,170,255,${(.2 + .3 * s).toFixed(3)})`, s => `rgba(130,95,255,${(.24 + .22 * s).toFixed(3)})`, 'rgba(190,225,255,.6)', t);
+
+    ctx.strokeStyle = 'rgba(200,215,255,.7)'; ctx.lineWidth = Math.max(1.2, R / 150);
+    ctx.beginPath(); ctx.arc(0, 0, Ri, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(63,164,255,.5)'; ctx.lineWidth = Math.max(.8, R / 260);
+    ctx.beginPath();
+    for (let i = 0; i < 72; i++) {
+      const a = S.tk + i * TAU / 72, r1 = Ri * 1.02, r2 = Ri * (i % 6 ? 1.06 : 1.11);
+      ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+    }
+    ctx.stroke();
+
+    // pupil singularity
+    const pg = ctx.createRadialGradient(0, 0, 0, 0, 0, Rp);
+    pg.addColorStop(0, '#f4faff'); pg.addColorStop(.14, '#9cc6ff'); pg.addColorStop(.5, '#2262f0'); pg.addColorStop(.88, '#0a1f80'); pg.addColorStop(1, '#020617');
+    ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(0, 0, Rp, 0, TAU); ctx.fill();
+
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(0, 0, Rp * 2.8, '60,130,255', .4 + .28 * beat + .22 * S.research);
+    if (S.research > .02) {
+      ctx.lineWidth = Math.max(1, R / 160);
+      ctx.strokeStyle = `rgba(190,225,255,${(.14 + .55 * S.research).toFixed(3)})`;
+      for (let j = 0; j < 6; j++) {
+        ctx.beginPath();
+        for (let k = 0; k <= 16; k++) {
+          const u = k / 16, ang = S.ps + j * TAU / 6 + u * 2.4, rad = Rp * (.1 + .9 * u);
+          const x = Math.cos(ang) * rad, y = Math.sin(ang) * rad;
+          if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      }
+    }
+    // photon ring
+    ctx.save();
+    ctx.strokeStyle = `rgba(210,238,255,${(.65 + .35 * beat).toFixed(3)})`;
+    ctx.lineWidth = Math.max(1.4, R / 120);
+    ctx.shadowColor = 'rgba(80,170,255,1)'; ctx.shadowBlur = 12 + 14 * beat + 14 * S.research;
+    ctx.beginPath(); ctx.arc(0, 0, Rp * 1.12, 0, TAU); ctx.stroke();
+    ctx.restore();
+
+    // anamorphic flare
+    const fa = .2 + .5 * beat + .35 * S.research + .15 * S.speak;
+    ctx.save();
+    ctx.scale(1, .04);
+    glowDisc(0, 0, Ri * 3, '170,215,255', Math.min(.85, fa));
+    ctx.restore();
+    ctx.save();
+    ctx.scale(.035, 1);
+    glowDisc(0, 0, Ri * 1.3, '200,230,255', Math.min(.6, fa * .6));
+    ctx.restore();
+    ctx.save();
+    ctx.rotate(S.ps * .15);
+    ctx.fillStyle = `rgba(240,248,255,${(.5 + .4 * beat).toFixed(3)})`;
+    const sr = Rp * .55;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4, rad = i % 2 ? sr * .16 : sr;
+      const x = Math.cos(a) * rad, y = Math.sin(a) * rad;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.restore(); // iris translate
+
+    // spherical shading and gloss
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.scale(1, .66);
+    const vg = ctx.createRadialGradient(0, 0, A * .5, 0, 0, A * 1.02);
+    vg.addColorStop(0, 'rgba(3,1,10,0)'); vg.addColorStop(1, 'rgba(3,1,10,.92)');
+    ctx.fillStyle = vg; ctx.fillRect(-A * 1.2, -A * 1.2, A * 2.4, A * 2.4);
+    ctx.restore();
+    const tg = ctx.createLinearGradient(0, -ht, 0, -ht * .2);
+    tg.addColorStop(0, 'rgba(0,0,0,.5)'); tg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = tg; ctx.fillRect(-A, -ht - 2, A * 2, ht * .85 + 2);
+    ctx.fillStyle = 'rgba(255,255,255,.16)';
+    ctx.beginPath(); ctx.ellipse(ix - Ri * .32, iy - Ri * .46, Ri * .28, Ri * .11, -.5, 0, TAU); ctx.fill();
+    ctx.restore(); // clip
+
+    // metallic lids
+    const mg = ctx.createLinearGradient(0, -H2, 0, H2);
+    mg.addColorStop(0, '#332b4c'); mg.addColorStop(.35, '#100c1d'); mg.addColorStop(.5, '#07050f'); mg.addColorStop(.65, '#100c1d'); mg.addColorStop(1, '#2c2444');
+    ctx.beginPath(); lens(A2, H2, H2 * .9); lens(A, ht, hb);
+    ctx.fillStyle = mg; ctx.fill('evenodd');
+
+    const c2t = H2 / .75, c2b = H2 * .9 / .75, c1t = ht / .75, c1b = hb / .75;
+    ctx.strokeStyle = 'rgba(160,140,215,.26)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const u of [.12, .26, .4, .6, .74, .88]) {
+      let p = bez(A, c1t, u, -1), q = bez(A2, c2t, u, -1);
+      ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]);
+      p = bez(A, c1b, u, 1); q = bez(A2, c2b, u, 1);
+      ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(63,164,255,.4)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); lens(A2, H2, H2 * .9); ctx.stroke();
+
+    // lit rim + chase LEDs
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.beginPath(); lens(A, ht, hb);
+    const rg = ctx.createLinearGradient(-A, 0, A, 0);
+    rg.addColorStop(0, 'rgba(90,175,255,1)'); rg.addColorStop(.5, 'rgba(170,125,255,.6)'); rg.addColorStop(1, 'rgba(90,175,255,1)');
+    ctx.strokeStyle = rg;
+    ctx.lineWidth = Math.max(2, R / 90) * (1 + S.blink * 1.5);
+    ctx.shadowColor = 'rgba(160,110,255,.5)';
+    ctx.shadowBlur = 16 + 18 * S.blink + 8 * beat;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    const rad = Math.max(1.8, R / 70);
+    for (let i = 0; i < 14; i++) {
+      const u = .08 + i * .84 / 13;
+      for (const s of [-1, 1]) {
+        const p = bez(A, s < 0 ? c1t : c1b, u, s);
+        const gl = Math.pow(Math.max(0, Math.sin(t * 2.6 * calm - u * 7 + (s < 0 ? 0 : 2))), 4);
+        ctx.fillStyle = `rgba(${i % 2 ? '110,190,255' : '130,215,255'},${(.18 + .82 * gl).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(p[0], p[1], rad * (.7 + .7 * gl), 0, TAU); ctx.fill();
+      }
+    }
+    glowDisc(0, 0, R * 1.7, '150,110,255', .02 + .025 * beat);
+    ctx.restore();
+  }
+
+  function trails(t) {
+    if (S.speak < .02 || say.classList.contains('fade')) return;
+    const r = say.getBoundingClientRect();
+    const sx = cx, sy = cy + 1.1 * R;
+    const tx = r.left + r.width / 2, ty = r.top - 2;
+    if (ty < sy + 6) return;
+    const al = S.speak * .6;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 4; i++) {
+      const off = (i - 1.5) * R * .22, w = Math.sin(t * 1.2 * calm + i * 1.7) * R * .1;
+      const c1x = sx + off * 1.6 + w, c1y = sy + (ty - sy) * .3;
+      const c2x = tx + off * .5 - w, c2y = sy + (ty - sy) * .75;
+      const gr = ctx.createLinearGradient(sx, sy, tx, ty);
+      gr.addColorStop(0, `rgba(110,185,255,${al.toFixed(3)})`); gr.addColorStop(1, `rgba(170,130,255,${(al * .2).toFixed(3)})`);
+      ctx.strokeStyle = gr;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tx + off * .3, ty); ctx.stroke();
+      for (let j = 0; j < 5; j++) {
+        const u = (t * .3 * calm + j / 5 + i * .17) % 1;
+        const px = bezPt(sx, c1x, c2x, tx + off * .3, u), py = bezPt(sy, c1y, c2y, ty, u);
+        ctx.fillStyle = `rgba(200,230,255,${(al * (1 - u * .4)).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(px, py, 1.8, 0, TAU); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  let sayLeft = -1;
+  function frame(now) {
+    const t = now / 1000;
+    const dt = Math.min(.05, (t - S.last) || .016);
+    S.last = t; S.t = t;
+
+    S.research += (S.rTarget - S.research) * (1 - Math.exp(-dt * 3.5));
+    S.think += (S.thTarget - S.think) * (1 - Math.exp(-dt * 3));
+    S.speak += (S.spTarget - S.speak) * (1 - Math.exp(-dt * 4));
+
+    const bpm = 56 + 40 * S.research + 16 * S.speak + 8 * S.think;
+    S.hp = (S.hp + dt * bpm / 60) % 1;
+    const beat = beatAt(S.hp);
+    root.style.setProperty('--beat', beat.toFixed(3));
+
+    // the eye shrinks and rises while a long answer is on screen
+    S.dock += (S.dockT - S.dock) * (1 - Math.exp(-dt * 3));
+    R = RB * (1 - (narrow ? .3 : .42) * S.dock);
+    cy = cy0 + (cyDock - cy0) * S.dock;
+
+    // horizontal position: make room when the drawer is open on wide screens
+    const dw = drawerOpen && !narrow ? drawer.offsetWidth : 0;
+    const want = clamp(Math.max(cx0, dw + 12 + 1.65 * R), cx0, Math.max(cx0, W - 12 - 1.65 * R));
+    S.cxs += (want - S.cxs) * (1 - Math.exp(-dt * 6));
+    cx = S.cxs;
+    const capW = Math.min(say.classList.contains('long') ? 736 : 576, W - 32);
+    const left = Math.round(clamp(cx, capW / 2 + 16, W - capW / 2 - 16));
+    if (left !== sayLeft) { say.style.left = left + 'px'; sayLeft = left; }
+
+    // gaze: follows the pointer for a moment after it moves, otherwise scans on its own
+    if (t - S.pt < 2.5) {
+      S.tx = clamp((S.px - cx) / (R * 1.6), -1, 1);
+      S.ty = clamp((S.py - cy) / (R * 1.2), -1, 1) * .8;
+      S.dwell = .3;
+    } else {
+      S.dwell -= dt;
+      if (S.dwell <= 0) nextTarget();
+    }
+    S.jt -= dt;
+    if (S.jt <= 0) { S.jt = .14; S.jx = (Math.random() - .5) * .05; S.jy = (Math.random() - .5) * .05; }
+    const k = 1 - Math.exp(-dt * 16);
+    S.gx += (S.tx + S.jx - S.gx) * k;
+    S.gy += (S.ty + S.jy - S.gy) * k;
+    updateBlink(dt);
+
+    S.sa += dt * (.16 + S.research * .5 + S.think * .3) * calm;
+    S.sb -= dt * (.42 + S.research * 1.1 + S.think * .6) * calm;
+    S.ps += dt * (.5 + S.research * 16) * calm;
+    S.tk += dt * .08 * calm;
+
+    const open = Math.max(0, 1 - S.blink - .07 * S.research);
+    const A = 1.45 * R, A2 = 1.62 * R, H2 = 1.28 * R;
+    const ht = R * .95 * open + .4, hb = R * .8 * open + .4;
+    const ix = S.gx * R * .62, iy = S.gy * R * .3;
+    const Ri = R * (.6 + .025 * Math.sin(t * .8 * calm) + .02 * Math.sin(t * 2.3 * calm)) - S.research * R * .035 + beat * R * .008;
+    const Rp = Ri * (.34 + .03 * Math.sin(t * 1.1 * calm)) * (1 + .1 * S.speak) + beat * Ri * .035 - S.research * Ri * .03;
+    const contract = .5 + .5 * Math.sin(t * .7 * calm);
+    const g = {A, A2, H2, ht, hb, ix, iy, Ri, Rp, contract, beat};
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    for (const s of stars) {
+      const tw = s.b * (.55 + .45 * Math.sin(t * s.sp * calm + s.ph));
+      const x = (((s.x * W - S.gx * 6 * s.z + t * s.z * 1.2 * calm) % W) + W) % W, y = s.y * H;
+      ctx.fillStyle = `rgba(${s.c},${tw.toFixed(3)})`;
+      ctx.fillRect(x, y, s.s, s.s);
+      if (s.big) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        glowDisc(x + s.s / 2, y + s.s / 2, s.s * 5, s.c, tw * .28);
+        ctx.restore();
+      }
+    }
+    if (calm === 1) {
+      if (!S.sh && t > S.nsh) {
+        const a = rr(.25, .6);
+        S.sh = {x: rr(.05, .8) * W, y: rr(0, .4) * H, vx: Math.cos(a) * W * .9, vy: Math.sin(a) * W * .9, l: 0};
+      }
+      if (S.sh) {
+        const h = S.sh;
+        h.l += dt; h.x += h.vx * dt; h.y += h.vy * dt;
+        const al = Math.max(0, 1 - h.l / .9);
+        const gr = ctx.createLinearGradient(h.x, h.y, h.x - h.vx * .14, h.y - h.vy * .14);
+        gr.addColorStop(0, `rgba(255,255,255,${(al * .9).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = gr; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x - h.vx * .14, h.y - h.vy * .14); ctx.stroke();
+        if (h.l > .9) { S.sh = null; S.nsh = t + rr(7, 15); }
+      }
+    }
+
+    const bob = Math.sin(t * .6 * calm) * R * .03;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(cx, cy + bob, R * 2.2, '110,60,255', .05 + .03 * beat);
+    glowDisc(cx, cy + bob + R * .3, R * 1.7, '50,130,255', .03 + .02 * beat);
+    glowDisc(cx + S.gx * R * .6, cy + bob, R * 1.4, '50,120,255', .05 + .14 * S.research + .03 * beat);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(cx, cy + bob);
+    ctx.rotate(Math.sin(t * .23 * calm) * .04);
+    ctx.transform(.975 + .025 * Math.cos(t * .35 * calm), 0, Math.sin(t * .2 * calm) * .03, 1, 0, 0);
+    hud(t, beat);
+    stream(t);
+    drawEye(t, g);
+    ctx.restore();
+
+    trails(t);
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- conversations ---------- */
+  const KEY = 'oculon.convos.v1';
+  const uid = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const DAY = 864e5;
+  function seedExamples() {
+    const now = Date.now();
+    return [
+      {id: uid(), ts: now - 2 * DAY, example: true, msgs: [
+        {r: 'u', t: 'PESQUISE tendências de interfaces com IA'},
+        {r: 'a', t: 'Varredura concluída. Exemplo de resposta guardada para mostrar como o histórico aparece aqui.'}]},
+      {id: uid(), ts: now - 5 * DAY, example: true, msgs: [
+        {r: 'u', t: 'Resuma o plano de lançamento'},
+        {r: 'a', t: 'Registrado. Este é outro exemplo de conversa antiga, só para preencher o menu.'}]}
+    ];
+  }
+  let convos = [];
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw === null) convos = seedExamples();
+    else { const p = JSON.parse(raw); convos = Array.isArray(p) ? p : []; }
+  } catch (e) { convos = seedExamples(); }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(convos)); } catch (e) { /* storage unavailable */ } }
+  save();
+
+  let curId = null, viewId = null, delArm = 0;
+  const byId = id => convos.find(c => c.id === id);
+  const titleOf = c => { const m = c.msgs.find(x => x.r === 'u'); const s = m ? m.t : 'Conversa vazia'; return s.length > 60 ? s.slice(0, 57) + '...' : s; };
+  const fmt = ts => new Date(ts).toLocaleString('pt-BR', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+
+  function renderList() {
+    listEl.textContent = '';
+    const sorted = convos.slice().sort((a, b) => b.ts - a.ts);
+    if (!sorted.length) {
+      const p = document.createElement('p'); p.className = 'd-empty';
+      p.textContent = 'Nenhuma conversa guardada. Digite algo na barra para começar.';
+      listEl.append(p);
+      return;
+    }
+    for (const c of sorted) {
+      const li = document.createElement('li');
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'd-item';
+      const ti = document.createElement('span'); ti.className = 'ti'; ti.textContent = titleOf(c);
+      const me = document.createElement('span'); me.className = 'me';
+      me.append(document.createTextNode(fmt(c.ts) + ' · ' + c.msgs.length + ' msg'));
+      if (c.id === curId) { const k = document.createElement('span'); k.className = 'chip'; k.textContent = 'atual'; me.append(k); }
+      if (c.example) { const k = document.createElement('span'); k.className = 'chip'; k.textContent = 'exemplo'; me.append(k); }
+      b.append(ti, me);
+      b.addEventListener('click', () => openThread(c.id));
+      li.append(b); listEl.append(li);
+    }
+  }
+  function renderThread() {
+    const c = byId(viewId);
+    if (!c) return;
+    tTitle.textContent = titleOf(c);
+    threadEl.textContent = '';
+    for (const m of c.msgs) {
+      const p = document.createElement('p'); p.className = 'msg ' + (m.r === 'u' ? 'user' : 'ai');
+      const b = document.createElement('b'); b.textContent = m.r === 'u' ? 'User:' : 'AI:';
+      p.append(b, document.createTextNode(' ' + m.t));
+      threadEl.append(p);
+    }
+    threadEl.scrollTop = threadEl.scrollHeight;
+  }
+  function openThread(id) {
+    viewId = id; delArm = 0; delBtn.textContent = 'Apagar'; delBtn.classList.remove('warn');
+    listView.hidden = true; threadView.hidden = false;
+    renderThread();
+    backBtn.focus();
+  }
+  function showList() {
+    viewId = null; threadView.hidden = true; listView.hidden = false;
+    renderList();
+  }
+  function pushMsg(role, text) {
+    let c = byId(curId);
+    if (!c) { c = {id: uid(), ts: Date.now(), msgs: []}; convos.push(c); curId = c.id; }
+    c.msgs.push({r: role, t: text}); c.ts = Date.now();
+    save();
+    if (viewId === c.id && !threadView.hidden) renderThread();
+    if (!listView.hidden) renderList();
+  }
+
+  /* ---------- drawer ---------- */
+  function setDrawer(open) {
+    drawerOpen = open;
+    drawer.classList.toggle('open', open);
+    drawer.inert = !open;
+    scrim.hidden = !open;
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    menuBtn.setAttribute('aria-label', open ? 'Fechar conversas' : 'Abrir conversas');
+    if (open) { showList(); closeBtn.focus(); } else menuBtn.focus();
+  }
+  menuBtn.addEventListener('click', () => setDrawer(!drawerOpen));
+  closeBtn.addEventListener('click', () => setDrawer(false));
+  scrim.addEventListener('click', () => setDrawer(false));
+  addEventListener('keydown', e => { if (e.key === 'Escape' && drawerOpen) setDrawer(false); });
+  backBtn.addEventListener('click', showList);
+  newBtn.addEventListener('click', () => {
+    curId = null; setDrawer(false); showSay('Nova conversa. Digite sua vontade.', false);
+    cmd.focus();
+  });
+  contBtn.addEventListener('click', () => {
+    curId = viewId; setDrawer(false); showSay('Conversa retomada. Pode continuar.', false);
+    cmd.focus();
+  });
+  delBtn.addEventListener('click', () => {
+    if (!delArm) {
+      delArm = 1; delBtn.textContent = 'Confirmar'; delBtn.classList.add('warn');
+      setTimeout(() => { delArm = 0; delBtn.textContent = 'Apagar'; delBtn.classList.remove('warn'); }, 3000);
+      return;
+    }
+    convos = convos.filter(c => c.id !== viewId);
+    if (curId === viewId) curId = null;
+    save(); showList();
+  });
+
+  /* ---------- caption: what the Oculon says ---------- */
+  let fadeTimer = 0, stick = true;
+  say.addEventListener('scroll', () => { stick = say.scrollHeight - say.scrollTop - say.clientHeight < 24; });
+  function sayText(text, o) {
+    o = o || {};
+    clearTimeout(fadeTimer);
+    say.classList.remove('fade');
+    say.classList.toggle('dim', !!o.dim);
+    say.classList.toggle('typing', !!o.typing);
+    const long = !o.short && (text.length > 180 || text.indexOf('\n') !== -1);
+    say.classList.toggle('long', long);
+    if (long) say.setAttribute('tabindex', '0'); else say.removeAttribute('tabindex');
+    S.dockT = long ? 1 : 0;
+    say.textContent = text;
+    if (long && stick) say.scrollTop = say.scrollHeight;
+    if (o.fade && !long) fadeTimer = setTimeout(() => say.classList.add('fade'), 14000);
+  }
+  const showSay = text => sayText(text, {short: true, fade: true});
+
+  /* ---------- exact maths the AI can call ---------- */
+  const fmt12 = x => (typeof x === 'number' && isFinite(x)) ? +x.toPrecision(12) : x;
+  function lgamma(z) {
+    if (z < .5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * z))) - lgamma(1 - z);
+    z -= 1;
+    const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    let x = c[0];
+    for (let i = 1; i < 9; i++) x += c[i] / (z + i);
+    const t = z + 7.5;
+    return .5 * Math.log(2 * Math.PI) + (z + .5) * Math.log(t) - t + Math.log(x);
+  }
+  function fact(n) {
+    if (!(n >= 0) || n !== Math.floor(n)) throw new Error('fatorial exige inteiro maior ou igual a 0');
+    if (n > 170) return Infinity;
+    let r = 1;
+    for (let i = 2; i <= n; i++) r *= i;
+    return r;
+  }
+  function comb(n, k) {
+    if (n !== Math.floor(n) || k !== Math.floor(k) || k < 0 || n < 0 || k > n) throw new Error('comb(n,k) exige inteiros com 0 <= k <= n');
+    k = Math.min(k, n - k);
+    let r = 1;
+    for (let i = 1; i <= k; i++) r = r * (n - k + i) / i;
+    return Math.abs(r) < 9e15 ? Math.round(r) : r;
+  }
+  function perm(n, k) {
+    if (n !== Math.floor(n) || k !== Math.floor(k) || k < 0 || n < 0 || k > n) throw new Error('perm(n,k) exige inteiros com 0 <= k <= n');
+    let r = 1;
+    for (let i = 0; i < k; i++) r *= (n - i);
+    return r;
+  }
+  function evalExpr(src) {
+    const s = String(src).toLowerCase().replace(/\s+/g, '').replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/π/g, 'pi');
+    if (!s || s.length > 300) throw new Error('expressão vazia ou longa demais');
+    let i = 0, depth = 0;
+    const F1 = {sqrt: Math.sqrt, raiz: Math.sqrt, abs: Math.abs, ln: Math.log, log: Math.log10, log10: Math.log10, log2: Math.log2, exp: Math.exp, sin: Math.sin, cos: Math.cos, tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan, floor: Math.floor, ceil: Math.ceil, round: Math.round, fat: fact, fatorial: fact};
+    const FN = {comb: comb, perm: perm, pow: Math.pow, min: Math.min, max: Math.max, mod: (a, b) => a - b * Math.floor(a / b)};
+    const peek = () => s[i];
+    function num() {
+      const m = /^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/.exec(s.slice(i));
+      if (!m) throw new Error('número esperado na posição ' + i);
+      i += m[0].length;
+      return parseFloat(m[0]);
+    }
+    function primary() {
+      if (++depth > 60) throw new Error('parênteses demais');
+      let v;
+      const c = peek();
+      if (c === '(') {
+        i++; v = expr();
+        if (peek() !== ')') throw new Error('faltou fechar parêntese');
+        i++;
+      } else if (c !== undefined && /[0-9.]/.test(c)) {
+        v = num();
+      } else {
+        const m = /^[a-z_][a-z0-9_]*/.exec(s.slice(i));
+        if (!m) throw new Error('símbolo inesperado: ' + (c === undefined ? 'fim da expressão' : c));
+        const name = m[0];
+        i += name.length;
+        if (peek() === '(') {
+          i++;
+          const args = [];
+          if (peek() !== ')') {
+            args.push(expr());
+            while (peek() === ',') { i++; args.push(expr()); }
+          }
+          if (peek() !== ')') throw new Error('faltou fechar parêntese');
+          i++;
+          if (F1[name]) {
+            if (args.length !== 1) throw new Error(name + ' recebe 1 argumento');
+            v = F1[name](args[0]);
+          } else if (FN[name]) {
+            v = FN[name].apply(null, args);
+          } else throw new Error('função desconhecida: ' + name);
+        } else if (name === 'pi') v = Math.PI;
+        else if (name === 'e') v = Math.E;
+        else throw new Error('nome desconhecido: ' + name);
+      }
+      depth--;
+      while (peek() === '!') { i++; v = fact(v); }
+      return v;
+    }
+    function power() {
+      const b = primary();
+      if (peek() === '^') { i++; return Math.pow(b, unary()); }
+      if (peek() === '*' && s[i + 1] === '*') { i += 2; return Math.pow(b, unary()); }
+      return b;
+    }
+    function unary() {
+      if (peek() === '-') { i++; return -unary(); }
+      if (peek() === '+') { i++; return unary(); }
+      return power();
+    }
+    function term() {
+      let v = unary();
+      while ((peek() === '*' && s[i + 1] !== '*') || peek() === '/') {
+        const o = s[i++], r = unary();
+        v = o === '*' ? v * r : v / r;
+      }
+      return v;
+    }
+    function expr() {
+      let v = term();
+      while (peek() === '+' || peek() === '-') {
+        const o = s[i++], r = term();
+        v = o === '+' ? v + r : v - r;
+      }
+      return v;
+    }
+    const out = expr();
+    if (i < s.length) throw new Error('sobrou texto na posição ' + i + ': ' + s.slice(i, i + 10));
+    return out;
+  }
+  function Phi(x) {
+    if (x < -8) return 0;
+    if (x > 8) return 1;
+    let s = x, t = 0, b = x, q = x * x, k = 1;
+    while (s !== t) { t = s; k += 2; b *= q / k; s = t + b; }
+    return .5 + s * Math.exp(-.5 * q - .91893853320467274178);
+  }
+  function PhiInv(p) {
+    if (!(p > 0 && p < 1)) throw new Error('p deve estar entre 0 e 1 (exclusivo)');
+    const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+    const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+    const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+    const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+    const pl = .02425;
+    let x;
+    if (p < pl) {
+      const q = Math.sqrt(-2 * Math.log(p));
+      x = (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    } else if (p <= 1 - pl) {
+      const q = p - .5, r = q * q;
+      x = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+    } else {
+      const q = Math.sqrt(-2 * Math.log(1 - p));
+      x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    }
+    const e = Phi(x) - p, u = e * Math.sqrt(2 * Math.PI) * Math.exp(x * x / 2);
+    return x - u / (1 + x * u / 2);
+  }
+  function toNums(a, name) {
+    if (!Array.isArray(a)) throw new Error(name + ' deve ser uma lista de números');
+    const x = a.map(Number);
+    if (x.some(v => !isFinite(v))) throw new Error(name + ' tem valor que não é número');
+    return x;
+  }
+  function stats(dados, y) {
+    const x = toNums(dados, 'dados'), n = x.length;
+    if (n < 1 || n > 100000) throw new Error('use de 1 a 100000 valores');
+    const s = x.slice().sort((p, q) => p - q), sum = x.reduce((p, q) => p + q, 0), mean = sum / n;
+    const ss = x.reduce((p, v) => p + (v - mean) * (v - mean), 0);
+    const quant = p => { const h = (n - 1) * p, lo = Math.floor(h), hi = Math.ceil(h); return s[lo] + (s[hi] - s[lo]) * (h - lo); };
+    const counts = new Map();
+    x.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
+    let mx = 0;
+    counts.forEach(c => { if (c > mx) mx = c; });
+    const moda = mx > 1 ? Array.from(counts).filter(e => e[1] === mx).map(e => e[0]) : [];
+    const out = {
+      n: n, soma: fmt12(sum), media: fmt12(mean), mediana: fmt12(quant(.5)), moda: moda.slice(0, 10),
+      minimo: s[0], maximo: s[n - 1], amplitude: fmt12(s[n - 1] - s[0]),
+      q1: fmt12(quant(.25)), q3: fmt12(quant(.75)), iqr: fmt12(quant(.75) - quant(.25)),
+      variancia_populacional: fmt12(ss / n), desvio_populacional: fmt12(Math.sqrt(ss / n))
+    };
+    if (n > 1) {
+      out.variancia_amostral = fmt12(ss / (n - 1));
+      out.desvio_amostral = fmt12(Math.sqrt(ss / (n - 1)));
+      out.erro_padrao = fmt12(Math.sqrt(ss / (n - 1)) / Math.sqrt(n));
+    }
+    if (y !== undefined && y !== null) {
+      const yy = toNums(y, 'y');
+      if (yy.length !== n || n < 2) throw new Error('y precisa ter o mesmo tamanho de dados (mínimo 2)');
+      const my = yy.reduce((p, q) => p + q, 0) / n;
+      let sxy = 0, syy = 0;
+      for (let k = 0; k < n; k++) { sxy += (x[k] - mean) * (yy[k] - my); syy += (yy[k] - my) * (yy[k] - my); }
+      if (ss === 0 || syy === 0) throw new Error('variância zero: correlação indefinida');
+      const r = sxy / Math.sqrt(ss * syy);
+      out.correlacao_pearson = fmt12(r);
+      out.r2 = fmt12(r * r);
+      out.reta_y_sobre_x = {inclinacao: fmt12(sxy / ss), intercepto: fmt12(my - sxy / ss * mean)};
+    }
+    return out;
+  }
+  function prob(a) {
+    const t = String(a.tipo || '').toLowerCase();
+    const num = v => { const x = Number(v); if (v === undefined || v === null || !isFinite(x)) throw new Error('parâmetro numérico ausente ou inválido'); return x; };
+    const lnC = (n, k) => lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1);
+    const tails = (pmf, k, top) => {
+      let cdf = 0, below = 0;
+      for (let j = 0; j <= k && j <= top; j++) { cdf += pmf(j); if (j < k) below += pmf(j); }
+      return {'P(X=k)': fmt12(pmf(k)), 'P(X<=k)': fmt12(Math.min(1, cdf)), 'P(X>=k)': fmt12(Math.max(0, 1 - below))};
+    };
+    if (t === 'binomial') {
+      const n = num(a.n), p = num(a.p), k = Math.floor(num(a.k));
+      if (n < 0 || n !== Math.floor(n) || n > 1e6 || p < 0 || p > 1) throw new Error('binomial: n inteiro até 1e6 e p entre 0 e 1');
+      const pmf = j => j < 0 || j > n ? 0 : (p === 0 ? (j === 0 ? 1 : 0) : p === 1 ? (j === n ? 1 : 0) : Math.exp(lnC(n, j) + j * Math.log(p) + (n - j) * Math.log(1 - p)));
+      return Object.assign({tipo: t}, tails(pmf, k, n), {media: fmt12(n * p), desvio: fmt12(Math.sqrt(n * p * (1 - p)))});
+    }
+    if (t === 'poisson') {
+      const l = num(a.lambda), k = Math.floor(num(a.k));
+      if (l <= 0 || l > 1e6) throw new Error('poisson: lambda entre 0 e 1e6');
+      const pmf = j => j < 0 ? 0 : Math.exp(-l + j * Math.log(l) - lgamma(j + 1));
+      return Object.assign({tipo: t}, tails(pmf, k, 2e6), {media: fmt12(l), desvio: fmt12(Math.sqrt(l))});
+    }
+    if (t === 'normal') {
+      const mu = num(a.media), sd = num(a.desvio), x = num(a.x);
+      if (sd <= 0) throw new Error('normal: desvio deve ser positivo');
+      const z = v => (v - mu) / sd;
+      const out = {tipo: t, z: fmt12(z(x)), 'P(X<=x)': fmt12(Phi(z(x))), 'P(X>=x)': fmt12(1 - Phi(z(x)))};
+      if (a.x2 !== undefined && a.x2 !== null) {
+        const x2 = num(a.x2);
+        out['P(x<X<x2)'] = fmt12(Phi(z(Math.max(x, x2))) - Phi(z(Math.min(x, x2))));
+      }
+      return out;
+    }
+    if (t === 'normal_inversa') {
+      const mu = num(a.media), sd = num(a.desvio), p = num(a.p);
+      if (sd <= 0) throw new Error('normal_inversa: desvio deve ser positivo');
+      const z = PhiInv(p);
+      return {tipo: t, z: fmt12(z), x: fmt12(mu + sd * z)};
+    }
+    if (t === 'hipergeometrica') {
+      const P = num(a.populacao), K = num(a.sucessos), n = num(a.amostra), k = Math.floor(num(a.k));
+      if ([P, K, n].some(v => v < 0 || v !== Math.floor(v)) || K > P || n > P) throw new Error('hipergeometrica: inteiros com sucessos <= populacao e amostra <= populacao');
+      const pmf = j => (j < Math.max(0, n - (P - K)) || j > Math.min(n, K)) ? 0 : Math.exp(lnC(K, j) + lnC(P - K, n - j) - lnC(P, n));
+      return Object.assign({tipo: t}, tails(pmf, k, n), {media: fmt12(n * K / P)});
+    }
+    if (t === 'geometrica') {
+      const p = num(a.p), k = Math.floor(num(a.k));
+      if (p <= 0 || p > 1) throw new Error('geometrica: p entre 0 (exclusivo) e 1');
+      return {tipo: t, 'P(X=k)': fmt12(k >= 1 ? Math.pow(1 - p, k - 1) * p : 0), 'P(X<=k)': fmt12(k >= 1 ? 1 - Math.pow(1 - p, k) : 0), 'P(X>=k)': fmt12(k >= 1 ? Math.pow(1 - p, k - 1) : 1), media: fmt12(1 / p), obs: 'X conta tentativas até o primeiro sucesso (k >= 1)'};
+    }
+    if (t === 'exponencial') {
+      const r = num(a.taxa), x = num(a.x);
+      if (r <= 0) throw new Error('exponencial: taxa deve ser positiva');
+      return {tipo: t, 'P(X<=x)': fmt12(x <= 0 ? 0 : 1 - Math.exp(-r * x)), 'P(X>=x)': fmt12(x <= 0 ? 1 : Math.exp(-r * x)), media: fmt12(1 / r)};
+    }
+    throw new Error('tipo desconhecido; use binomial, poisson, normal, normal_inversa, hipergeometrica, geometrica ou exponencial');
+  }
+
+  const working = () => { stateEl.textContent = 'Oculon · Calculando'; };
+  const TOOLS = [
+    {
+      name: 'calcular',
+      description: 'Calcula uma expressão matemática com precisão de computador e devolve {resultado}. Aceita + - * / ^ ( ) e ! (fatorial), as constantes pi e e, e as funções sqrt, abs, ln, log (base 10), log2, exp, sin, cos, tan (radianos), asin, acos, atan, floor, ceil, round, comb(n,k), perm(n,k), min, max, pow, mod. Use ponto como separador decimal.',
+      inputSchema: {type: 'object', properties: {expressao: {type: 'string', description: 'Ex.: comb(10,3)*0.5^10 ou sqrt(2)+3!'}}, required: ['expressao']},
+      execute: input => {
+        working();
+        const v = evalExpr(input.expressao);
+        if (!isFinite(v)) throw new Error('o resultado não é um número finito');
+        return {resultado: fmt12(v)};
+      }
+    },
+    {
+      name: 'estatisticas',
+      description: 'Estatística descritiva de uma lista de números: n, soma, média, mediana, moda, mínimo, máximo, quartis, variância e desvio padrão (amostral e populacional), erro padrão. Se enviar também a lista y (mesmo tamanho), devolve correlação de Pearson, r2 e a reta de regressão de y sobre x.',
+      inputSchema: {type: 'object', properties: {dados: {type: 'array', items: {type: 'number'}}, y: {type: 'array', items: {type: 'number'}}}, required: ['dados']},
+      execute: input => { working(); return stats(input.dados, input.y); }
+    },
+    {
+      name: 'probabilidade',
+      description: 'Probabilidades exatas por distribuição. tipo: binomial (n,p,k), poisson (lambda,k), normal (media,desvio,x e opcional x2 para P(x<X<x2)), normal_inversa (media,desvio,p), hipergeometrica (populacao,sucessos,amostra,k), geometrica (p,k), exponencial (taxa,x). Devolve P(X=k), P(X<=k), P(X>=k) ou o valor pedido, mais média e desvio quando existem.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tipo: {type: 'string', enum: ['binomial', 'poisson', 'normal', 'normal_inversa', 'hipergeometrica', 'geometrica', 'exponencial']},
+          n: {type: 'number'}, p: {type: 'number'}, k: {type: 'number'}, lambda: {type: 'number'},
+          media: {type: 'number'}, desvio: {type: 'number'}, x: {type: 'number'}, x2: {type: 'number'},
+          populacao: {type: 'number'}, sucessos: {type: 'number'}, amostra: {type: 'number'}, taxa: {type: 'number'}
+        },
+        required: ['tipo']
+      },
+      execute: input => { working(); return prob(input); }
+    }
+  ];
+
+  /* ---------- the AI ---------- */
+  const RULES = `Você é o Oculon, uma IA que conversa por um painel com um olho animado. Você é uma IA, não finja ser humano. Se perguntarem qual modelo está por trás, diga que roda sobre o Claude, da Anthropic.
+
+Responda no idioma da pessoa (padrão: português do Brasil), de forma natural, clara e direta.
+
+Formato: texto simples, sem markdown (nada de asteriscos, #, tabelas ou blocos de código). Para listas use linhas começando com "- " ou "1. ". Escreva matemática em texto puro, por exemplo x^2, raiz(x), a/b, pi. Pergunta simples: 1 a 3 frases. Pergunta difícil: explique passo a passo em partes curtas e termine com a resposta final em uma linha.
+
+Você ajuda com conversa livre, geografia, matemática, probabilidade, estatística e pesquisas fáceis ou difíceis.
+
+Matemática e números: se as ferramentas calcular, estatisticas e probabilidade estiverem disponíveis, use-as para qualquer conta que não seja trivial e confira o resultado, em vez de calcular de cabeça. Se não estiverem, calcule com cuidado, passo a passo. Mostre as fórmulas e os passos principais. Em probabilidade, diga as suposições (independência, com ou sem reposição). Em estatística, diga o tamanho da amostra e os limites das conclusões.
+
+Geografia e fatos do mundo: dê números aproximados e avise quando população, PIB, fronteiras ou rankings mudam com o tempo. Não afirme o que não sabe.
+
+Pesquisa: se a mensagem começar com PESQUISE, faça uma resposta mais completa: resumo em 2 a 3 frases, depois os pontos principais e, no fim, o que é incerto ou o que vale conferir. Você não navega na internet e não vê notícias em tempo real. Responda com o que sabe, avise quando o assunto depender de informação recente e nunca invente fontes, links, citações ou estatísticas. Se não souber, diga que não sabe.
+
+Seja honesto, sem bajulação, e corrija erros da pessoa com gentileza.`;
+
+  const ERR = {
+    not_granted: 'A IA não foi liberada para esta página. Aceite o pedido de permissão quando ele aparecer.',
+    sampling_disabled: 'O Claude não está disponível para esta conta ou organização.',
+    not_declared: 'Esta página perdeu a permissão de usar o Claude.',
+    capability_disabled: 'A IA não pode ser usada nesta visualização.',
+    capability_removed: 'Este aplicativo ainda não suporta a IA nesta página.',
+    rate_limited: 'Muitas perguntas seguidas ou limite de uso atingido. Espere um pouco e tente de novo.',
+    session_expired: 'Sua sessão expirou. Entre de novo no claude.ai e recarregue a página.',
+    refused: 'Não consegui responder a esse pedido. Tente reformular.',
+    empty_completion: 'A resposta veio vazia. Tente perguntar de outro jeito.',
+    prompt_too_large: 'A conversa ficou grande demais. Comece uma nova conversa pelo menu.',
+    upstream_error: 'Falha na conexão com a IA. Tente de novo.'
+  };
+  const NOAI = 'A IA não está disponível nesta visualização. Abra a página pelo claude.ai, com sua conta, e permita o uso do Claude quando o pedido aparecer.';
+  const HARD = /(probabilidade|estat[ií]stic|desvio|vari[âa]ncia|regress|correla[cç]|integral|derivad|equa[cç][aã]o|demonstr|prove|combinat|distribui[cç][aã]o|matriz|limite|teorema|hip[óo]tese|intervalo de confian)/i;
+  const pickTier = (v, isR) => (isR || HARD.test(v)) ? 'complex' : (v.length < 60 && !/\d/.test(v)) ? 'quick' : 'default';
+
+  const samplePromise = (async () => {
+    try {
+      const fn = window.claude && window.claude.use ? await window.claude.use('sample') : null;
+      if (!fn) return {fn: null, canTools: false};
+      const lim = await fn.limits().catch(() => null);
+      return {fn: fn, canTools: !!(lim && lim.tools && lim.tools.maxCount >= TOOLS.length)};
+    } catch (e) {
+      return {fn: null, canTools: false};
+    }
+  })();
+
+  /* ---------- interaction ---------- */
+  const RESEARCH_RE = /^\s*pesquise/i;
+  let mode = 'idle', ctl = null;
+  const NAMES = {idle: 'Ocioso', thinking: 'Calculando', research: 'Pesquisando', speaking: 'Falando'};
+  function syncState() {
+    S.rTarget = (mode === 'research' || (mode === 'idle' && RESEARCH_RE.test(cmd.value))) ? 1 : 0;
+    S.thTarget = (mode === 'thinking' || mode === 'research') ? 1 : 0;
+    S.spTarget = mode === 'speaking' ? 1 : 0;
+    stateEl.textContent = 'Oculon · ' + (mode === 'idle' && S.rTarget ? 'Pesquisa armada' : NAMES[mode]);
+    const busy = mode !== 'idle';
+    send.textContent = busy ? '■' : '>';
+    send.classList.toggle('stop', busy);
+    send.setAttribute('aria-label', busy ? 'Parar resposta' : 'Enviar comando');
+    newBtn.disabled = contBtn.disabled = busy;
+  }
+  function setMode(m) { mode = m; syncState(); }
+
+  async function run(v) {
+    const isR = RESEARCH_RE.test(v);
+    setMode(isR ? 'research' : 'thinking');
+    stick = true;
+    sayText(isR ? 'Pesquisando…' : 'Pensando…', {dim: true, short: true});
+    const ai = await samplePromise;
+    if (!ai.fn) {
+      sayText(NOAI, {short: true, fade: true});
+      setMode('idle');
+      return;
+    }
+    ctl = new AbortController();
+    const c = byId(curId);
+    const hist = (c ? c.msgs : []).slice(-13).map(m => ({role: m.r === 'u' ? 'user' : 'assistant', content: m.t.slice(0, 6000)}));
+    let got = false;
+    const opts = {
+      cache: false, signal: ctl.signal, modelTier: pickTier(v, isR),
+      onText: u => {
+        if (!got) { got = true; setMode('speaking'); }
+        sayText(u.text, {typing: true});
+      }
+    };
+    if (ai.canTools) opts.tools = TOOLS;
+    try {
+      const res = await ai.fn([{role: 'user', content: RULES}].concat(hist), opts);
+      let text = res.text;
+      if (res.truncated) text += '\n\n[resposta cortada: peça em partes menores]';
+      sayText(text, {fade: true});
+      pushMsg('a', text);
+    } catch (e) {
+      const code = e && e.code, partial = (e && e.text) || '';
+      if (code === 'refused') {
+        sayText(ERR.refused, {short: true, fade: true});
+      } else if (partial) {
+        const text = partial + '\n\n' + (code === 'cancelled' ? '[interrompido]' : '[resposta interrompida]');
+        sayText(text, {fade: true});
+        pushMsg('a', text);
+      } else if (code === 'cancelled') {
+        sayText('Parei.', {short: true, fade: true});
+      } else {
+        sayText(ERR[code] || ERR.upstream_error, {short: true, fade: true});
+      }
+    } finally {
+      ctl = null;
+      setTimeout(() => setMode('idle'), 500);
+    }
+  }
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    if (mode !== 'idle') return;
+    const v = cmd.value.trim();
+    if (!v) return;
+    cmd.value = '';
+    pushMsg('u', v);
+    run(v);
+  });
+  send.addEventListener('click', e => {
+    if (mode !== 'idle') {
+      e.preventDefault();
+      if (ctl && (e.detail > 0 || document.activeElement === send)) ctl.abort();
+    }
+  });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !drawerOpen && ctl) ctl.abort(); });
+  cmd.addEventListener('input', syncState);
+  addEventListener('resize', layout);
+  addEventListener('pointermove', e => { S.px = e.clientX; S.py = e.clientY; S.pt = S.t; });
+
+  layout();
+  syncState();
+  renderList();
+  S.spTarget = 1;
+  setTimeout(() => { if (mode === 'idle') S.spTarget = 0; }, 2600);
+  fadeTimer = setTimeout(() => say.classList.add('fade'), 12000);
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
