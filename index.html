@@ -171,6 +171,7 @@ button{font:inherit;color:inherit}
   </form>
 </div>
 
+<script src="config.js"></script>
 <script>
 (() => {
   'use strict';
@@ -1144,11 +1145,107 @@ Seja honesto, sem bajulação, e corrija erros da pessoa com gentileza.`;
     refused: 'Não consegui responder a esse pedido. Tente reformular.',
     empty_completion: 'A resposta veio vazia. Tente perguntar de outro jeito.',
     prompt_too_large: 'A conversa ficou grande demais. Comece uma nova conversa pelo menu.',
-    upstream_error: 'Falha na conexão com a IA. Tente de novo.'
+    upstream_error: 'Falha na conexão com a IA. Tente de novo.',
+    unauthorized: 'Código de acesso ausente ou inválido. Digite /codigo SEU_CODIGO e envie.',
+    network: 'Sem conexão com o servidor da IA. Confira o apiUrl no config.js e a internet.'
   };
-  const NOAI = 'A IA não está disponível nesta visualização. Abra a página pelo claude.ai, com sua conta, e permita o uso do Claude quando o pedido aparecer.';
+  const NOAI = 'A IA ainda não está configurada. Defina apiUrl no config.js (veja o README) ou abra a página pelo claude.ai.';
   const HARD = /(probabilidade|estat[ií]stic|desvio|vari[âa]ncia|regress|correla[cç]|integral|derivad|equa[cç][aã]o|demonstr|prove|combinat|distribui[cç][aã]o|matriz|limite|teorema|hip[óo]tese|intervalo de confian)/i;
   const pickTier = (v, isR) => (isR || HARD.test(v)) ? 'complex' : (v.length < 60 && !/\d/.test(v)) ? 'quick' : 'default';
+
+  /* ---------- outside claude.ai: talk to your own proxy ---------- */
+  const CFG = window.OCULON_CONFIG || {};
+  const API_URL = String(CFG.apiUrl || '').trim();
+  const CODE_KEY = 'oculon.code';
+  const getCode = () => { try { return localStorage.getItem(CODE_KEY) || ''; } catch (e) { return ''; } };
+  const saveCode = c => { try { localStorage.setItem(CODE_KEY, c); } catch (e) { /* storage unavailable */ } };
+
+  async function readSSE(res, onEvent) {
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const r = await reader.read();
+      if (r.done) break;
+      buf += dec.decode(r.value, {stream: true}).replace(/\r\n/g, '\n');
+      let k;
+      while ((k = buf.indexOf('\n\n')) !== -1) {
+        const raw = buf.slice(0, k);
+        buf = buf.slice(k + 2);
+        const line = raw.split('\n').find(l => l.indexOf('data:') === 0);
+        if (!line) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+        onEvent(ev);
+      }
+    }
+  }
+
+  async function apiChat(hist, tier, signal, onText) {
+    const msgs = hist.map(m => ({role: m.role, content: m.content}));
+    while (msgs.length && msgs[0].role !== 'user') msgs.shift();
+    const tools = TOOLS.map(t => ({name: t.name, description: t.description, input_schema: t.inputSchema}));
+    let acc = '', stopReason = null;
+    const fail = code => ({code: code, text: acc});
+    const join = (a, b) => (a && b) ? a + '\n\n' + b : (a || b);
+    for (let round = 0; round < 6; round++) {
+      let res;
+      try {
+        res = await fetch(API_URL, {
+          method: 'POST', signal: signal,
+          headers: {'content-type': 'application/json', 'x-access-code': getCode()},
+          body: JSON.stringify({tier: tier, system: RULES, messages: msgs, tools: tools})
+        });
+      } catch (e) {
+        throw fail(e && e.name === 'AbortError' ? 'cancelled' : 'network');
+      }
+      if (!res.ok) throw fail(res.status === 401 || res.status === 403 ? 'unauthorized' : res.status === 429 ? 'rate_limited' : 'upstream_error');
+      const blocks = [];
+      let roundText = '';
+      stopReason = null;
+      try {
+        await readSSE(res, ev => {
+          if (ev.type === 'content_block_start') {
+            const cb = ev.content_block || {};
+            blocks[ev.index] = {type: cb.type, id: cb.id, name: cb.name, text: '', json: ''};
+          } else if (ev.type === 'content_block_delta') {
+            const b = blocks[ev.index];
+            if (!b || !ev.delta) return;
+            if (ev.delta.type === 'text_delta') {
+              b.text += ev.delta.text;
+              roundText = blocks.filter(x => x && x.type === 'text').map(x => x.text).join('');
+              onText(join(acc, roundText));
+            } else if (ev.delta.type === 'input_json_delta') b.json += ev.delta.partial_json;
+          } else if (ev.type === 'message_delta' && ev.delta) {
+            stopReason = ev.delta.stop_reason || stopReason;
+          } else if (ev.type === 'error') {
+            throw new Error((ev.error && ev.error.message) || 'erro');
+          }
+        });
+      } catch (e) {
+        acc = join(acc, roundText);
+        throw fail(e && e.name === 'AbortError' ? 'cancelled' : 'upstream_error');
+      }
+      acc = join(acc, roundText);
+      if (stopReason !== 'tool_use') break;
+      const content = [], results = [];
+      for (const b of blocks) {
+        if (!b) continue;
+        if (b.type === 'text' && b.text) content.push({type: 'text', text: b.text});
+        if (b.type === 'tool_use') {
+          let input = {};
+          try { input = b.json ? JSON.parse(b.json) : {}; } catch (e) { input = {}; }
+          content.push({type: 'tool_use', id: b.id, name: b.name, input: input});
+          const tool = TOOLS.find(t => t.name === b.name);
+          let out, isErr = false;
+          try { out = JSON.stringify(tool ? tool.execute(input, {signal: signal}) : 'ferramenta desconhecida'); }
+          catch (e) { out = 'Error: ' + ((e && e.message) || e); isErr = true; }
+          results.push({type: 'tool_result', tool_use_id: b.id, content: out, is_error: isErr});
+        }
+      }
+      msgs.push({role: 'assistant', content: content}, {role: 'user', content: results});
+    }
+    return {text: acc, truncated: stopReason === 'max_tokens'};
+  }
 
   const samplePromise = (async () => {
     try {
@@ -1184,7 +1281,7 @@ Seja honesto, sem bajulação, e corrija erros da pessoa com gentileza.`;
     stick = true;
     sayText(isR ? 'Pesquisando…' : 'Pensando…', {dim: true, short: true});
     const ai = await samplePromise;
-    if (!ai.fn) {
+    if (!ai.fn && !API_URL) {
       sayText(NOAI, {short: true, fade: true});
       setMode('idle');
       return;
@@ -1193,16 +1290,16 @@ Seja honesto, sem bajulação, e corrija erros da pessoa com gentileza.`;
     const c = byId(curId);
     const hist = (c ? c.msgs : []).slice(-13).map(m => ({role: m.r === 'u' ? 'user' : 'assistant', content: m.t.slice(0, 6000)}));
     let got = false;
-    const opts = {
-      cache: false, signal: ctl.signal, modelTier: pickTier(v, isR),
-      onText: u => {
-        if (!got) { got = true; setMode('speaking'); }
-        sayText(u.text, {typing: true});
-      }
+    const show = text => {
+      if (!got) { got = true; setMode('speaking'); }
+      sayText(text, {typing: true});
     };
+    const opts = {cache: false, signal: ctl.signal, modelTier: pickTier(v, isR), onText: u => show(u.text)};
     if (ai.canTools) opts.tools = TOOLS;
     try {
-      const res = await ai.fn([{role: 'user', content: RULES}].concat(hist), opts);
+      const res = ai.fn
+        ? await ai.fn([{role: 'user', content: RULES}].concat(hist), opts)
+        : await apiChat(hist, opts.modelTier, ctl.signal, show);
       let text = res.text;
       if (res.truncated) text += '\n\n[resposta cortada: peça em partes menores]';
       sayText(text, {fade: true});
@@ -1231,6 +1328,8 @@ Seja honesto, sem bajulação, e corrija erros da pessoa com gentileza.`;
     if (mode !== 'idle') return;
     const v = cmd.value.trim();
     if (!v) return;
+    const cm = /^\/codigo\s+(\S+)/i.exec(v);
+    if (cm) { saveCode(cm[1]); cmd.value = ''; syncState(); showSay('Código de acesso salvo neste navegador.'); return; }
     cmd.value = '';
     pushMsg('u', v);
     run(v);
